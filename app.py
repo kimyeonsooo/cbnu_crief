@@ -17,6 +17,21 @@ st.set_page_config(
     layout="wide"
 )
 
+# 연도 입력창의 +/- 스텝 버튼 숨기기
+st.markdown(
+    """
+    <style>
+    div[data-testid="stNumberInput"] button {
+        display: none;
+    }
+    div[data-testid="stNumberInput"] > div > div {
+        border-radius: 6px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 def load_scholarly():
     try:
@@ -27,12 +42,26 @@ def load_scholarly():
         st.stop()
 
 
-def make_query(author: str, keyword: str, exact: bool) -> str:
+def make_query(author: str, keywords_raw: str, mode: str, exact: bool) -> str:
+    """저자명 + 여러 키워드(쉼표 구분)를 AND/OR/정확 구문 조건으로 조합한 검색식을 생성한다.
+
+    - mode == "AND": 키워드를 공백으로 나열 (Google Scholar 기본 동작이 AND)
+    - mode == "OR" : 키워드를 "(A OR B OR C)" 형태로 묶음
+    - exact == True: 각 키워드를 큰따옴표로 감싸 정확 구문(phrase) 검색
+    """
     parts = []
     if author.strip():
         parts.append(f'author:"{author.strip()}"')
-    if keyword.strip():
-        parts.append(f'"{keyword.strip()}"' if exact else keyword.strip())
+
+    keywords = [k.strip() for k in keywords_raw.split(",") if k.strip()]
+    formatted = [f'"{k}"' if exact else k for k in keywords]
+
+    if formatted:
+        if mode == "OR" and len(formatted) > 1:
+            parts.append("(" + " OR ".join(formatted) + ")")
+        else:
+            parts.append(" ".join(formatted))
+
     return " ".join(parts)
 
 
@@ -164,19 +193,33 @@ st.caption("충북대학교 공동실험실습관 장비 이용 연구자의 논
 with st.sidebar:
     st.header("검색 조건")
     author = st.text_input("저자명", placeholder="예: Gil Dong Hong 또는 홍길동")
-    keyword = st.text_input("키워드", placeholder="예: field emission scanning electron microscope")
-    exact = st.checkbox("키워드 정확 일치 검색", value=True)
+    keyword = st.text_input(
+        "키워드 (쉼표로 구분하여 여러 개 입력 가능)",
+        placeholder="예: XRD, SEM, field emission scanning electron microscope",
+    )
+    mode = st.radio(
+        "키워드 결합 조건",
+        options=["AND", "OR"],
+        index=0,
+        horizontal=True,
+        help="AND: 입력한 키워드를 모두 포함하는 논문 검색 / OR: 입력한 키워드 중 하나라도 포함하는 논문 검색",
+    )
+    exact = st.checkbox(
+        "정확 구문 검색",
+        value=True,
+        help="체크 시 각 키워드를 정확한 구문(phrase)으로 검색합니다. 예: SEM → \"SEM\"",
+    )
     c1, c2 = st.columns(2)
     with c1:
-        year_from = st.number_input("시작 연도", min_value=1900, max_value=2100, value=None, step=1, placeholder="전체")
+        year_from = st.number_input("시작 연도", min_value=1900, max_value=2100, value=None, step=1, placeholder="전체", format="%d")
     with c2:
-        year_to = st.number_input("종료 연도", min_value=1900, max_value=2100, value=None, step=1, placeholder="전체")
+        year_to = st.number_input("종료 연도", min_value=1900, max_value=2100, value=None, step=1, placeholder="전체", format="%d")
     limit = st.slider("최대 수집 건수", min_value=1, max_value=50, value=10)
     pause = st.slider("요청 간 대기(초)", min_value=0.1, max_value=2.0, value=1.0, step=0.1)
     load_details = st.checkbox("논문별 상세 메타데이터 추가 조회", value=False, help="초록·권호·페이지 등의 정보를 보완하지만 요청 수가 늘어납니다.")
     search_clicked = st.button("검색", type="primary", use_container_width=True)
 
-query = make_query(author, keyword, exact)
+query = make_query(author, keyword, mode, exact)
 period = "전체 기간" if not year_from and not year_to else f"{int(year_from) if year_from else '최초'} ~ {int(year_to) if year_to else '현재'}"
 st.markdown(f"**생성된 검색식:** `{query or '검색어를 입력하세요.'}`  |  **발행연도 필터:** `{period}`")
 
