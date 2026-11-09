@@ -37,8 +37,9 @@ def load_scholarly():
     try:
         from scholarly import scholarly
         return scholarly
-    except ImportError:
-        st.error("`scholarly` 패키지가 설치되어 있지 않습니다. `python -m pip install -r requirements.txt`를 실행하세요.")
+    except ImportError as exc:
+        st.error("논문 검색 라이브러리를 불러오지 못했습니다.")
+        st.exception(exc)
         st.stop()
 
 
